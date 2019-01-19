@@ -30,7 +30,7 @@
   },
   "bundleDependencies": false,
   "dependencies": {
-    "fakegato-history": "^0.4.0"
+    "fakegato-history": "^0.5.3"
   },
   "deprecated": false,
   "description": "This is a homebridge plugin for local weather stations",
