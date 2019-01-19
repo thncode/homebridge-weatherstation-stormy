@@ -3,6 +3,8 @@ var inherits = require('util').inherits;
 var os = require("os");
 var hostname = os.hostname();
 const fs = require('fs');
+const moment = require('moment');
+
 
 var intervalID;
 
@@ -107,8 +109,52 @@ WeatherStationStormy.prototype.getStatusLowBattery = function (callback) {
 };
 
 WeatherStationStormy.prototype.getStatusMaxWind = function (callback) {	
-        callback(null, maxWind > alertLevel || avgWind > alertLevel ? 
-        			Characteristic.ContactSensorState.CONTACT_NOT_DETECTED : Characteristic.ContactSensorState.CONTACT_DETECTED);
+    callback(null, maxWind > alertLevel || avgWind > alertLevel ? 
+    		 Characteristic.ContactSensorState.CONTACT_NOT_DETECTED : Characteristic.ContactSensorState.CONTACT_DETECTED);
+};
+
+
+WeatherStationStormy.prototype.getOpenDuration = function (callback) {
+    this.maxWindAlertService.getCharacteristic(Characteristic.OpenDuration).updateValue(this.timeOpen, null);
+    return callback(null, this.timeOpen);
+};
+
+
+WeatherStationStormy.prototype.getClosedDuration = function (callback) {
+    this.maxWindAlertService.getCharacteristic(Characteristic.ClosedDuration).updateValue(this.timeClose, null);
+    return callback(null, this.timeClose);
+};
+
+
+WeatherStationStormy.prototype.gettimesOpened = function (callback) {
+    this.maxWindAlertService.getCharacteristic(Characteristic.TimesOpened).updateValue(this.timesOpened, null);
+    return callback(null, this.timesOpened);
+};
+
+
+WeatherStationStormy.prototype.getLastActivation = function (callback) {
+    this.maxWindAlertService.getCharacteristic(Characteristic.LastActivation).updateValue(this.lastActivation, null);
+    return callback(null, this.lastActivation);
+};
+
+
+WeatherStationStormy.prototype.getReset = function (callback) {
+    this.fakeGatoHistoryService.getCharacteristic(Characteristic.ResetTotal).updateValue(this.lastReset, null);
+    return callback(null, this.lastReset);
+};
+
+
+WeatherStationStormy.prototype.setReset = function (value, callback) {
+	this.timesOpened = 0;
+	this.lastReset = value;
+    this.fakeGatoHistoryService.setExtraPersistedData([{"lastActivation": this.lastActivation, "lastReset": this.lastReset, 
+    			"lastChange": this.lastChange, "timesOpened": this.timesOpened, "timeOpen": this.timeOpen, "timeClose": this.timeClose}]);
+
+    if (this.maxWindAlertService.getCharacteristic(Characteristic.TimesOpened)) {
+        this.maxWindAlertService.getCharacteristic(Characteristic.TimesOpened).updateValue(this.timesOpened, null)
+    }
+    this.fakeGatoHistoryService.getCharacteristic(Characteristic.ResetTotal).updateValue(this.lastReset, null);
+    return callback();
 };
 
 
@@ -139,7 +185,79 @@ WeatherStationStormy.prototype.setUpServices = function () {
         .on('get', this.getStatusActive.bind(this));
 
     this.fakeGatoHistoryService = new FakeGatoHistoryService("door", this, { storage: 'fs' });
+
+    Characteristic.OpenDuration = function() {
+    	 Characteristic.call(this, 'Time open', 'E863F118-079E-48FF-8F27-9C2605A29F52');
+         this.setProps({
+           format: Characteristic.Formats.UINT32,
+           unit: Characteristic.Units.SECONDS,
+           perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+         });
+         this.value = this.getDefaultValue();
+    };
+    inherits(Characteristic.OpenDuration, Characteristic);
+    Characteristic.OpenDuration.UUID = 'E863F118-079E-48FF-8F27-9C2605A29F52';  
+
+    Characteristic.ClosedDuration = function() {
+    	 Characteristic.call(this, 'Time closed', 'E863F119-079E-48FF-8F27-9C2605A29F52');
+         this.setProps({
+           format: Characteristic.Formats.UINT32,
+           unit: Characteristic.Units.SECONDS,
+           perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+         });
+         this.value = this.getDefaultValue();
+    };
+    inherits(Characteristic.ClosedDuration, Characteristic);
+    Characteristic.ClosedDuration.UUID = 'E863F119-079E-48FF-8F27-9C2605A29F52';  
     
+    Characteristic.LastActivation = function() {
+    	 Characteristic.call(this, 'Last Activation', 'E863F11A-079E-48FF-8F27-9C2605A29F52');
+         this.setProps({
+           format: Characteristic.Formats.UINT32,
+           unit: Characteristic.Units.SECONDS,
+           perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+         });
+         this.value = this.getDefaultValue();
+    };
+    inherits(Characteristic.LastActivation, Characteristic);
+    Characteristic.LastActivation.UUID = 'E863F11A-079E-48FF-8F27-9C2605A29F52';  
+
+    Characteristic.TimesOpened = function() {
+    	 Characteristic.call(this, 'times opened', 'E863F129-079E-48FF-8F27-9C2605A29F52');
+         this.setProps({
+           format: Characteristic.Formats.UINT32,
+           //unit: Characteristic.Units.SECONDS,
+           perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+         });
+         this.value = this.getDefaultValue();
+    };
+    inherits(Characteristic.TimesOpened, Characteristic);
+    Characteristic.TimesOpened.UUID = 'E863F129-079E-48FF-8F27-9C2605A29F52';  
+
+    Characteristic.ResetTotal = function() {
+    	 Characteristic.call(this, 'times opened', 'E863F112-079E-48FF-8F27-9C2605A29F52');
+         this.setProps({
+           format: Characteristic.Formats.UINT32,
+           //unit: Characteristic.Units.SECONDS,
+           perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+         });
+         this.value = this.getDefaultValue();
+    };
+    inherits(Characteristic.ResetTotal, Characteristic);
+    Characteristic.ResetTotal.UUID = 'E863F112-079E-48FF-8F27-9C2605A29F52';  
+    
+    this.maxWindAlertService.addCharacteristic(Characteristic.LastActivation)
+        .on('get', this.getLastActivation.bind(this));
+    this.maxWindAlertService.addCharacteristic(Characteristic.TimesOpened)
+        .on('get', this.gettimesOpened.bind(this));
+    this.maxWindAlertService.addCharacteristic(Characteristic.OpenDuration)
+        .on('get', this.getOpenDuration.bind(this));
+    this.maxWindAlertService.addCharacteristic(Characteristic.ClosedDuration)
+        .on('get', this.getClosedDuration.bind(this));
+    this.maxWindAlertService.addCharacteristic(Characteristic.ResetTotal)
+        .on('get', this.getReset.bind(this))
+        .on('set', this.setReset.bind(this));
+        
     if (this.fakeGatoHistoryService.getExtraPersistedData() == undefined) {
     	this.lastActivation = 0;
     	this.lastReset = moment().unix() - moment('2001-01-01T00:00:00Z').unix();
@@ -148,7 +266,8 @@ WeatherStationStormy.prototype.setUpServices = function () {
     	this.timeOpen = 0;
     	this.timeClose = 0;
            
-        this.fakeGatoHistoryService.setExtraPersistedData([{"lastActivation": this.lastActivation, "lastReset": this.lastReset, "lastChange": this.lastChange, "timesOpened": this.timesOpened, "timeOpen": this.timeOpen, "timeClose": this.timeClose}]);
+        this.fakeGatoHistoryService.setExtraPersistedData([{"lastActivation": this.lastActivation, "lastReset": this.lastReset, 
+        				"lastChange": this.lastChange, "timesOpened": this.timesOpened, "timeOpen": this.timeOpen, "timeClose": this.timeClose}]);
 
         } else {
             this.lastActivation = this.loggingService.getExtraPersistedData()[0].lastActivation;
