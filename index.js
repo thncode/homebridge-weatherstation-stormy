@@ -270,12 +270,12 @@ WeatherStationStormy.prototype.setUpServices = function () {
         				"lastChange": this.lastChange, "timesOpened": this.timesOpened, "timeOpen": this.timeOpen, "timeClose": this.timeClose}]);
 
         } else {
-            this.lastActivation = this.loggingService.getExtraPersistedData()[0].lastActivation;
-            this.lastReset = this.loggingService.getExtraPersistedData()[0].lastReset;
-            this.lastChange = this.loggingService.getExtraPersistedData()[0].lastChange;
-            this.timesOpened = this.loggingService.getExtraPersistedData()[0].timesOpened;
-            this.timeOpen = this.loggingService.getExtraPersistedData()[0].timeOpen;
-            this.timeClose = this.loggingService.getExtraPersistedData()[0].timeClose;
+            this.lastActivation = this.fakeGatoHistoryService.getExtraPersistedData()[0].lastActivation;
+            this.lastReset = this.fakeGatoHistoryService.getExtraPersistedData()[0].lastReset;
+            this.lastChange = this.fakeGatoHistoryService.getExtraPersistedData()[0].lastChange;
+            this.timesOpened = this.fakeGatoHistoryService.getExtraPersistedData()[0].timesOpened;
+            this.timeOpen = this.fakeGatoHistoryService.getExtraPersistedData()[0].timeOpen;
+            this.timeClose = this.fakeGatoHistoryService.getExtraPersistedData()[0].timeClose;
         }
         
     var CustomCharacteristic = {};
