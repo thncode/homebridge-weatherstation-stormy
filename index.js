@@ -1,24 +1,13 @@
-var Service, Characteristic, HomebridgeAPI, FakeGatoHistoryService;
+var Service, Characteristic, HomebridgeAPI, UUIDGen, FakeGatoHistoryService;
 var inherits = require('util').inherits;
 var os = require("os");
 var hostname = os.hostname();
 const fs = require('fs');
 const moment = require('moment');
 
-
-var intervalID;
-
 const readFile = "/home/pi/WeatherStation/data.txt";
 
-var maxWind;
-var avgWind;
-var battery;
-
-var alertLevel;
-
-var glog;
-var ctime;
-
+var maxWind, avgWind, battery, alertLevel, readtime, stormy, wasStormy;
 var lastActivation, lastReset, lastChange, timesOpened, timeOpen, timeClose;
 
 module.exports = function (homebridge) {
@@ -26,75 +15,84 @@ module.exports = function (homebridge) {
     Service = homebridge.hap.Service;
     Characteristic = homebridge.hap.Characteristic;
     HomebridgeAPI = homebridge;
+    UUIDGen = homebridge.hap.uuid;
     FakeGatoHistoryService = require("fakegato-history")(homebridge);
 
     homebridge.registerAccessory("homebridge-weatherstation-stormy", "WeatherStationStormy", WeatherStationStormy);
 };
 
 
-function read() {
-	var data = fs.readFileSync(readFile, "utf-8");
-	var lastSync = Date.parse(data.substring(0, 19));
-	maxWind = parseFloat(data.substring(34));
-	avgWind = parseFloat(data.substring(40));
-	battery = parseFloat(data.substring(57));
-}
-
-
 function WeatherStationStormy(log, config) {
+    
     var that = this;
-    this.log = glog = log;
+    this.log = log;
     this.name = config.name;
     this.displayName = this.name;
     this.deviceId = config.deviceId;
-    this.interval = Math.min(Math.max(config.interval, 1), 60);
 
     this.config = config;
 
-    this.storedData = {};
-
-	this.alertLevel = config['alertLevel'];
+	alertLevel = config['alertLevel'];
 
     this.setUpServices();
-    
-    read();
 
-	intervalID = setInterval(function() {
+    this.readData();
+    
+   	fs.watch(readFile, (event, filename) => {
+   		if (event === 'change') this.readData();
+   	});
+};
+
+
+WeatherStationStormy.prototype.readData = function () {
+
+	var data = fs.readFileSync(readFile, "utf-8");
+	var lastSync = Date.parse(data.substring(0, 19));
+	if (readtime == lastSync) return;
+	readtime = lastSync;
+
+	maxWind = parseFloat(data.substring(34));
+	avgWind = parseFloat(data.substring(40));
+	battery = parseFloat(data.substring(57));
+
+    stormy = maxWind > alertLevel || avgWind > alertLevel ? 1 : 0;
+
+	this.log("Storm data: ", maxWind, avgWind, stormy, battery);
+	
+	if (stormy != wasStormy) {
 		
-		var stats = fs.statSync(readFile);
-		
-		var doit = false;
-		if (ctime) {
-			if (ctime.getTime() != stats.mtime.getTime()) {
-				ctime = stats.mtime;
-				doit = true;
-			}
+		wasStormy = stormy;
+	
+		this.fakeGatoHistoryService.addEntry({ time: moment().unix(), status: stormy });
+	
+		this.maxWindAlertService.getCharacteristic(Characteristic.ContactSensorState).updateValue(stormy, null);
+	
+		if (stormy) {
+			this.timesOpened = this.timesOpened + 1;
+	        this.timeClose = this.timeClose + (moment().unix() - this.lastChange);
+	        this.lastActivation = moment().unix() - this.fakeGatoHistoryService.getInitialTime();
+		    this.maxWindAlertService.getCharacteristic(Characteristic.LastActivation).updateValue(this.lastActivation, null)
+	        this.maxWindAlertService.getCharacteristic(Characteristic.TimesOpened).updateValue(this.timesOpened, null)
 		}
 		else {
-			ctime = stats.mtime;
-			doit = true;
+	      	this.timeOpen = this.timeOpen + (moment().unix() - this.lastChange);
 		}
-			
-		if (doit) {
-			read();
-			glog("Stormy Data: ", maxWind, avgWind, battery);
-
-			that.fakeGatoHistoryService.addEntry({
-				time: new Date().getTime() / 1000,
-				status: maxWind > alertLevel || avgWind > alertLevel ? 1 : 0
-				});
-		}
-	}, 2000);
-};
+	
+	    this.lastChange = moment().unix();
+	    this.fakeGatoHistoryService.setExtraPersistedData([{ "lastActivation": this.lastActivation, "lastReset": this.lastReset, "lastChange": this.lastChange, 
+	    													 "timesOpened": this.timesOpened, "timeOpen": this.timeOpen, "timeClose": this.timeClose }]);
+	}
+    this.batteryService.getCharacteristic(Characteristic.BatteryLevel).updateValue(null);
+    this.batteryService.getCharacteristic(Characteristic.StatusLowBattery).updateValue(null);
+}; 
 
 
 WeatherStationStormy.prototype.getFirmwareRevision = function (callback) {
-    callback(null, '1.0.0');
+    return callback(null, '1.0');
 };
 
 WeatherStationStormy.prototype.getBatteryLevel = function (callback) {
-	var perc = (battery - 0.8) * 100;
-    callback(null,perc);
+    return callback(null, (battery - 0.8) * 100);
 };
 
 WeatherStationStormy.prototype.getStatusActive = function (callback) {
@@ -102,15 +100,11 @@ WeatherStationStormy.prototype.getStatusActive = function (callback) {
 };
 
 WeatherStationStormy.prototype.getStatusLowBattery = function (callback) {
-	if (battery >= 0.8)
-        callback(null, Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL);
-    else
-        callback(null, Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW);
+    return callback(null, battery >= 0.8 ? Characteristic.StatusLowBattery.BATTERY_LEVEL_NORMAL : Characteristic.StatusLowBattery.BATTERY_LEVEL_LOW);
 };
 
 WeatherStationStormy.prototype.getStatusMaxWind = function (callback) {	
-    callback(null, maxWind > alertLevel || avgWind > alertLevel ? 
-    		 Characteristic.ContactSensorState.CONTACT_NOT_DETECTED : Characteristic.ContactSensorState.CONTACT_DETECTED);
+    callback(null, stormy);
 };
 
 
@@ -159,7 +153,7 @@ WeatherStationStormy.prototype.setReset = function (value, callback) {
 
 
 WeatherStationStormy.prototype.setUpServices = function () {
-    // info service
+    
     this.informationService = new Service.AccessoryInformation();
 
     this.informationService
@@ -176,7 +170,7 @@ WeatherStationStormy.prototype.setUpServices = function () {
     this.batteryService.getCharacteristic(Characteristic.StatusLowBattery)
         .on('get', this.getStatusLowBattery.bind(this));
 
-    this.maxWindAlertService = new Service.ContactSensor("stürmisch", "maxWind");
+    this.maxWindAlertService = new Service.ContactSensor("Sturm", "maxWind");
     this.maxWindAlertService.getCharacteristic(Characteristic.ContactSensorState)
         .on('get', this.getStatusMaxWind.bind(this));
     this.maxWindAlertService.getCharacteristic(Characteristic.StatusLowBattery)
