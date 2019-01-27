@@ -5,7 +5,7 @@ var hostname = os.hostname();
 const fs = require('fs');
 const moment = require('moment');
 
-const readFile = "/home/pi/WeatherStation/data.txt";
+const readFile = "/root/.homebridge/weatherstation.txt";
 
 var maxWind, avgWind, battery, alertLevel, readtime, stormy, wasStormy;
 var lastActivation, lastReset, lastChange, timesOpened, timeOpen, timeClose;
